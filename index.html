@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#eef9f3">
+<title>LINE Flex Studio｜多頁卡片編輯與分享</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root {color-scheme:light} *{box-sizing:border-box}body{font-family:ui-sans-serif,system-ui,-apple-system,"Noto Sans TC",sans-serif}
+  .panel{background:#fff;border:1px solid #e2e8f0;border-radius:20px;box-shadow:0 9px 28px rgba(15,23,42,.045)}
+  .field{width:100%;min-height:43px;border:1px solid #cbd5e1;border-radius:11px;padding:10px 12px;background:#fff;outline:none;transition:border .15s,box-shadow .15s}
+  .field:focus{border-color:#20ab71;box-shadow:0 0 0 3px #d7fae6}.field.invalid{border-color:#e11d48;background:#fff1f2}
+  .lbl{display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:7px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:12px;padding:10px 15px;font-size:14px;font-weight:700;transition:transform .12s,filter .12s,background .12s;cursor:pointer}
+  .btn:not(:disabled):active{transform:scale(.97)}.btn:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.7)}
+  .btn-primary{background:#06c755;color:white}.btn-primary:hover:not(:disabled){background:#05ae4b}
+  .btn-dark{background:#0f172a;color:white}.btn-soft{background:#f1f5f9;color:#334155}.btn-soft:hover:not(:disabled){background:#e2e8f0}
+  .tab{border-radius:11px;padding:9px 14px;background:#f1f5f9;color:#475569;font-size:13px;font-weight:750;white-space:nowrap}
+  .tab.active{background:#dcfce7;color:#166534;box-shadow:inset 0 0 0 1px #86efac}
+  .preview-frame{background:#e8eff5;padding:24px 16px;overflow:auto;min-height:220px;border-radius:16px}
+  .preview-bubble{width:250px;min-width:250px;background:white;border-radius:15px;overflow:hidden;box-shadow:0 4px 15px rgba(0,0,0,.09);align-self:flex-start}
+  .preview-bubble img{display:block;width:100%;object-fit:cover;aspect-ratio:20/13}
+  .preview-content{padding:15px}.preview-title{font-weight:800;overflow-wrap:anywhere}.preview-copy{font-size:12px;color:#64748b;overflow-wrap:anywhere}
+  .preview-action{display:block;text-align:center;font-size:12px;font-weight:800;border-radius:9px;padding:9px;color:#fff;background:#06c755;text-decoration:none}
+  .preview-share{background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;margin-top:8px}
+  .code{font-size:12px;line-height:1.6;white-space:pre;overflow:auto;tab-size:2;max-height:560px}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:100;background:#0f172a;color:white;padding:12px 20px;border-radius:12px;box-shadow:0 15px 40px #0f172a40;max-width:calc(100vw - 24px);font-size:14px}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+<header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+  <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center gap-3"><div class="w-11 h-11 rounded-2xl bg-green-500 text-white flex items-center justify-center text-2xl font-black">L</div><div><h1 class="font-black text-xl tracking-tight">LINE Flex Studio</h1><p class="text-xs text-slate-500">純前端・多頁卡片・個人分享</p></div></div>
+    <div class="flex items-center gap-2"><span id="status" aria-live="polite" class="rounded-full px-3 py-2 bg-slate-100 text-slate-600 text-xs font-bold">● 未初始化</span><button id="shareBtn" class="btn btn-primary" disabled>↗ 發送至 LINE</button></div>
+  </div>
+</header>
+<main class="max-w-7xl mx-auto px-4 py-6 space-y-5">
+  <section class="panel p-5">
+    <div class="flex items-center justify-between gap-4 flex-wrap"><div><h2 class="font-black text-lg">01 · LIFF 連線設定</h2><p class="text-sm text-slate-500 mt-1">LIFF ID 是公開的應用識別碼，不是 Channel Secret。設定會儲存在本裝置。</p></div><a class="text-sm text-green-700 underline" href="https://developers.line.biz/console/" target="_blank" rel="noopener noreferrer">LINE Developers Console ↗</a></div>
+    <div class="flex flex-col sm:flex-row gap-3 mt-4"><input id="liffId" class="field flex-1" autocomplete="off" spellcheck="false" placeholder="輸入 LIFF ID，例如 1234567890-AbCdEfGh" aria-label="LIFF ID"><button id="initBtn" class="btn btn-dark whitespace-nowrap">初始化 LIFF</button></div>
+    <p id="connectionHint" class="text-xs text-slate-500 mt-3" aria-live="polite">Endpoint URL 請設定為 https://fish-rocker.github.io/line/ 。請先在 Console 啟用 shareTargetPicker。</p>
+  </section>
+  <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)] gap-5 items-start">
+    <div class="space-y-5 min-w-0">
+      <section class="panel p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3"><div><h2 class="font-black text-lg">02 · 多頁編輯器</h2><p id="pageCount" class="text-xs text-slate-500 mt-1">1 / 10 頁</p></div><div class="flex gap-2"><button id="addPage" class="btn btn-soft">＋ 新增分頁</button><button id="delPage" class="btn btn-soft text-rose-600">刪除此頁</button></div></div>
+        <div id="tabs" class="flex gap-2 overflow-x-auto py-3 mt-2" role="tablist"></div>
+        <div class="border-t border-slate-100 pt-4"><label class="lbl" for="layout">選擇目前分頁版型</label><select id="layout" class="field"><option value="image">單張大圖版</option><option value="standard">標準複合版（圖＋文＋按鈕）</option><option value="json">自訂 Bubble JSON 版</option></select></div>
+        <div id="fields" class="space-y-4 mt-5"></div>
+        <label class="mt-5 flex items-center gap-3 rounded-xl bg-green-50 border border-green-100 p-4 cursor-pointer"><input type="checkbox" id="reshare" class="w-5 h-5 accent-green-600"><span><strong class="text-sm text-green-900">啟用再次分享（轉傳）按鈕</strong><span class="block text-xs text-green-700 mt-1">此頁 Footer 加入轉傳連結，帶上整份多頁內容</span></span></label>
+        <div id="pageWarnings" class="text-sm text-rose-700 mt-3" aria-live="polite"></div>
+      </section>
+      <section class="panel p-5"><h2 class="font-black text-lg">03 · 本機範本庫</h2><p class="text-sm text-slate-500 mt-1">儲存在目前瀏覽器 LocalStorage，不會上傳到伺服器。</p><div class="flex flex-col sm:flex-row gap-3 mt-4"><input id="templateName" class="field flex-1" maxlength="60" placeholder="輸入範本名稱"><button id="saveTemplate" class="btn btn-dark">儲存目前編輯</button></div><div id="templates" class="flex flex-wrap gap-2 mt-4"></div></section>
+      <section class="panel p-5"><h2 class="font-black text-lg">04 · 轉傳連結與資料</h2><p class="text-sm text-slate-500 mt-1">任何人開啟連結後，會還原整份卡片並可自行再次分享；此方式會讓卡片資料包含在公開網址中。</p><div class="flex gap-2 mt-4"><input id="shareUrl" class="field flex-1 min-w-0 text-xs" readonly aria-label="轉傳連結"><button id="copyUrl" class="btn btn-soft whitespace-nowrap">複製連結</button></div><p id="urlStatus" class="text-xs text-slate-500 mt-2" aria-live="polite"></p><div class="flex flex-wrap gap-2 mt-4"><button id="exportBtn" class="btn btn-soft">↓ 匯出編輯資料</button><button id="importBtn" class="btn btn-soft">↑ 匯入編輯資料</button><input id="importFile" type="file" accept="application/json,.json" hidden><button id="resetBtn" class="btn btn-soft text-rose-600">清空重設</button></div></section>
+    </div>
+    <div class="space-y-5 min-w-0">
+      <section class="panel p-5"><div class="flex justify-between gap-2 flex-wrap items-center"><div><h2 class="font-black text-lg">卡片視覺預覽</h2><p class="text-xs text-slate-500 mt-1">瀏覽器近似模擬，實際 LINE 排版以用戶端為準。</p></div><span class="text-xs rounded-full bg-slate-100 px-3 py-1" id="previewLabel">1 張卡片</span></div><div class="preview-frame mt-4"><div id="visualPreview" class="flex items-start gap-3 min-w-max"></div></div></section>
+      <section class="panel p-5"><div class="flex justify-between items-center gap-2"><div><h2 class="font-black text-lg">完整 Flex Carousel JSON</h2><p id="jsonSize" class="text-xs text-slate-500 mt-1"></p></div><button id="copyJson" class="btn btn-soft">複製 JSON</button></div><div id="jsonErrors" class="text-rose-700 text-sm mt-3" aria-live="polite"></div><pre id="jsonPreview" class="code bg-slate-950 text-green-200 rounded-xl p-4 mt-4" tabindex="0"></pre></section>
+    </div>
+  </div>
+  <p class="text-center text-xs text-slate-500 pb-4">LINE Flex Studio · 本機優先 · 不蒐集聊天資料 · GitHub Pages</p>
+</main>
+<div id="toast" class="toast" hidden role="status"></div>
+<script>
+'use strict';
+(() => {
+  const STORAGE = { liff:'flex_studio_liff_id_v1', drafts:'flex_studio_drafts_v1', current:'flex_studio_current_v1' };
+  const MAX_PAGES=10, MAX_URL_WARN=850, MAX_URL_HARD=1000, MAX_DATA_CHARS=200000;
+  const PLACEHOLDER='https://developers.line.biz/media/messaging-api/flex-message-elements/flex-image-1.png';
+  const $=id=>document.getElementById(id);
+  const encoder=new TextEncoder();
+  let pages=[newPage('standard')], active=0, initialized=false, initializing=false, readyId='', toastTimer=null;
+  const deepCopy=v=>JSON.parse(JSON.stringify(v));
+  const byteLength=s=>encoder.encode(s).length;
+  function newPage(layout='standard'){return {layout,imageUrl:'',imageLink:'',title:'精彩內容分享',list:'第一個重點\n第二個重點\n第三個重點',buttonText:'',buttonUrl:'',customJson:'{\n  "type": "bubble",\n  "body": {\n    "type": "box",\n    "layout": "vertical",\n    "contents": [{ "type": "text", "text": "自訂卡片", "weight": "bold" }]\n  }\n}',reshare:false};}
+  function getLocal(key,fallback){try{let v=localStorage.getItem(key);return v===null?fallback:JSON.parse(v)}catch{return fallback}}
+  function setLocal(key,value){try{localStorage.setItem(key,JSON.stringify(value));return true}catch{toast('儲存空間不足或已停用 LocalStorage');return false}}
+  function toast(msg){const el=$('toast');el.textContent=msg;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.hidden=true,3600)}
+  function setStatus(kind,message,hint){$('status').className='rounded-full px-3 py-2 text-xs font-bold '+({ok:'bg-green-100 text-green-700',bad:'bg-rose-100 text-rose-700',wait:'bg-amber-100 text-amber-800',idle:'bg-slate-100 text-slate-600'}[kind]||'bg-slate-100');$('status').textContent=message;if(hint)$('connectionHint').textContent=hint;updateSendButton()}
+  function updateSendButton(){const btn=$('shareBtn');btn.disabled=!initialized||initializing;btn.title=btn.disabled?'先完成 LIFF 初始化':'使用 LINE 分享選擇器'}
+  function escapeHtml(str){return String(str).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]))}
+  function validHttps(value){try{const u=new URL(value);return u.protocol==='https:'&&!!u.hostname&&u.username===''&&u.password===''}catch{return false}}
+  function linkOrThrow(value,label){if(!validHttps(value))throw Error(`${label}必須是完整的 https:// 網址`);return value.trim()}
+  function normalizePage(raw){if(!raw||typeof raw!=='object'||Array.isArray(raw))throw Error('分頁資料格式不正確');const p=newPage();for(const k of Object.keys(p)){if(k==='reshare')p[k]=raw[k]===true;else if(typeof raw[k]==='string')p[k]=raw[k].slice(0,MAX_DATA_CHARS)}if(!['image','standard','json'].includes(p.layout))throw Error('存在未知的卡片版型');return p}
+  function normalizeData(raw){if(!raw||typeof raw!=='object'||!Array.isArray(raw.pages)||raw.pages.length<1||raw.pages.length>MAX_PAGES)throw Error('範本必須包含 1～10 個分頁');return {version:1,pages:raw.pages.map(normalizePage)}}
+  function getData(){return {version:1,pages:deepCopy(pages)}}
+  function loadData(raw,persist=true){const data=normalizeData(raw);pages=data.pages;active=0;renderAll();if(persist)saveCurrent()}
+  function saveCurrent(){setLocal(STORAGE.current,getData())}
+  function field(label,key,{placeholder='',textarea=false,rows=4,help='',required=false}={}){let v=escapeHtml(pages[active][key]||'');let input=textarea?`<textarea data-field="${key}" class="field font-normal" rows="${rows}" placeholder="${escapeHtml(placeholder)}">${v}</textarea>`:`<input data-field="${key}" class="field" value="${v}" placeholder="${escapeHtml(placeholder)}" ${required?'required':''}>`;return `<div><label class="lbl">${label}${required?' <span class="text-rose-500">*</span>':''}</label>${input}${help?`<p class="text-xs text-slate-500 mt-1">${escapeHtml(help)}</p>`:''}</div>`}
+  function renderTabs(){$('tabs').innerHTML=pages.map((p,i)=>`<button class="tab ${i===active?'active':''}" role="tab" aria-selected="${i===active}" data-page="${i}">頁面 ${i+1}${p.reshare?' ✉':''}</button>`).join('');$('pageCount').textContent=`${pages.length} / ${MAX_PAGES} 頁`;$('addPage').disabled=pages.length>=MAX_PAGES;$('delPage').disabled=pages.length<=1}
+  function renderFields(){let p=pages[active];$('layout').value=p.layout;$('reshare').checked=p.reshare;let html='';if(p.layout==='image'){html=field('主圖片網址','imageUrl',{placeholder:'https://example.com/cover.jpg',required:true})+field('點擊圖片跳轉網址','imageLink',{placeholder:'https://example.com/',help:'可留空；有輸入時點擊整張圖片即可開啟連結。'})}else if(p.layout==='standard'){html=field('主圖片網址','imageUrl',{placeholder:'https://example.com/cover.jpg',help:'可留空；有填寫時使用 HTTPS 圖片。'})+field('標題文字','title',{required:true})+field('內容列表（每行一個項目）','list',{textarea:true,rows:6,help:'每一行會轉為一個帶有圓點的項目。'})+field('底部動作按鈕文字','buttonText',{placeholder:'瞭解更多'})+field('按鈕跳轉網址','buttonUrl',{placeholder:'https://example.com/',help:'只有按鈕文字與網址都有填寫，才會產生動作按鈕。'})}else{html=field('單個 Bubble JSON','customJson',{textarea:true,rows:18,help:'僅接受 type: "bubble" 的 JSON 物件；若勾選再次分享，會合併至 Bubble Footer。'})} $('fields').innerHTML=html}
+  function renderAll(){renderTabs();renderFields();updateOutput()}
+  function compactData(){return {v:1,p:pages.map(p=>[p.layout==='image'?0:p.layout==='standard'?1:2,...(p.layout==='image'?[p.imageUrl,p.imageLink]:p.layout==='standard'?[p.imageUrl,p.title,p.list,p.buttonText,p.buttonUrl]:[p.customJson]),p.reshare?1:0])}}
+  function expandData(d){if(!d||!Array.isArray(d.p))return normalizeData(d);return normalizeData({pages:d.p.map(a=>{if(!Array.isArray(a)||![0,1,2].includes(a[0]))throw Error('分享分頁格式不正確');let p=newPage(a[0]===0?'image':a[0]===1?'standard':'json');if(a[0]===0){p.imageUrl=String(a[1]||'');p.imageLink=String(a[2]||'');p.reshare=a[3]===1}else if(a[0]===1){p.imageUrl=String(a[1]||'');p.title=String(a[2]||'');p.list=String(a[3]||'');p.buttonText=String(a[4]||'');p.buttonUrl=String(a[5]||'');p.reshare=a[6]===1}else{p.customJson=String(a[1]||'');p.reshare=a[2]===1}return p})})}
+  function getLink(){const id=$('liffId').value.trim();if(!/^[0-9]+-[A-Za-z0-9_-]+$/.test(id))throw Error('請先輸入有效格式的 LIFF ID');return `https://liff.line.me/${encodeURIComponent(id)}/?lid=${encodeURIComponent(id)}&data=${encodeURIComponent(encodeData(compactData()))}`}
+  // 保留使用者指定的 Base64(encodeURIComponent(JSON)) 協定，以便跨裝置還原。
+  function encodeData(data){return btoa(encodeURIComponent(JSON.stringify(data)))}
+  function decodeData(encoded){if(typeof encoded!=='string'||encoded.length>MAX_DATA_CHARS*6)throw Error('資料太長');let text=decodeURIComponent(atob(encoded));if(text.length>MAX_DATA_CHARS)throw Error('解碼後資料超過安全上限');return expandData(JSON.parse(text))}
+  function ensureBox(block){if(block&&block.type==='box'&&Array.isArray(block.contents))return block;throw Error('自訂 Bubble 的 footer 必須為含 contents 陣列的 box 元件')}
+  function buildBubble(page,index,link){let bubble;if(page.layout==='json'){try{bubble=JSON.parse(page.customJson)}catch(e){throw Error(`第 ${index+1} 頁 JSON 語法有誤：${e.message}`)}if(!bubble||Array.isArray(bubble)||typeof bubble!=='object'||bubble.type!=='bubble')throw Error(`第 ${index+1} 頁自訂 JSON 必須是單一 bubble 物件`);bubble=deepCopy(bubble)}else if(page.layout==='image'){const url=linkOrThrow(page.imageUrl,`第 ${index+1} 頁主圖片網址`);bubble={type:'bubble',size:'mega',hero:{type:'image',url,size:'full',aspectRatio:'20:13',aspectMode:'cover'}};if(page.imageLink.trim())bubble.hero.action={type:'uri',label:'查看圖片',uri:linkOrThrow(page.imageLink,`第 ${index+1} 頁圖片跳轉網址`)}}else{
+      if(!page.title.trim())throw Error(`第 ${index+1} 頁請輸入標題`);
+      bubble={type:'bubble',size:'mega',body:{type:'box',layout:'vertical',spacing:'md',contents:[{type:'text',text:page.title.trim(),weight:'bold',size:'xl',wrap:true}]}};
+      if(page.imageUrl.trim())bubble.hero={type:'image',url:linkOrThrow(page.imageUrl,`第 ${index+1} 頁圖片網址`),size:'full',aspectRatio:'20:13',aspectMode:'cover'};
+      const lines=page.list.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      if(lines.length){bubble.body.contents.push({type:'box',layout:'vertical',spacing:'sm',contents:lines.map(line=>({type:'box',layout:'horizontal',spacing:'sm',contents:[{type:'text',text:'•',flex:0,color:'#06C755',size:'sm'},{type:'text',text:line,wrap:true,size:'sm',color:'#475569',flex:1}]}))})}
+      const text=page.buttonText.trim(),url=page.buttonUrl.trim();if(text||url){if(!text||!url)throw Error(`第 ${index+1} 頁動作按鈕文字與網址必須同時填寫`);bubble.footer={type:'box',layout:'vertical',contents:[{type:'button',style:'primary',color:'#06C755',action:{type:'uri',label:text,uri:linkOrThrow(url,`第 ${index+1} 頁按鈕網址`)}}]}}
+    }
+    if(page.reshare){if(!link)throw Error('已啟用再次分享，請先設定 LIFF ID');const button={type:'button',style:'primary',color:'#089B62',action:{type:'uri',label:'✉️ 轉傳分享此訊息',uri:link}};if(!bubble.footer)bubble.footer={type:'box',layout:'vertical',spacing:'sm',contents:[]};else ensureBox(bubble.footer);bubble.footer.contents.push(button)}
+    if(byteLength(JSON.stringify(bubble))>30*1024)throw Error(`第 ${index+1} 頁超過 Flex Bubble 30 KB 限制`);
+    return bubble
+  }
+  function buildCarousel(){const hasReshare=pages.some(p=>p.reshare);let link='';if(hasReshare){link=getLink();if(link.length>MAX_URL_HARD)throw Error(`轉傳網址長達 ${link.length} 字元，超過本工具安全上限；請減少圖片網址或自訂 JSON 內容`)}const result={type:'carousel',contents:pages.map((p,i)=>buildBubble(p,i,link))};if(byteLength(JSON.stringify(result))>50*1024)throw Error('Flex Carousel 超過官方 50 KB 上限');const sizes=new Set(result.contents.map(b=>b.size||'mega'));if(sizes.size>1)throw Error('Carousel 所有 Bubble 必須使用相同 size；請調整自訂 JSON');return result}
+  function renderVisual(){const container=$('visualPreview');container.innerHTML='';pages.forEach((p,i)=>{let card=document.createElement('div');card.className='preview-bubble';if(p.layout==='json'){let title='自訂 JSON',info='自訂 Bubble 結構';try{let parsed=JSON.parse(p.customJson);title=(parsed.body?.contents||[]).find(x=>x.type==='text')?.text||title;info='內容依 JSON 指定，請以 LINE 實機檢查'}catch{info='JSON 語法有誤'}card.innerHTML=`<div class="preview-content"><div class="text-green-600 text-xs font-black mb-2">CUSTOM JSON · ${i+1}</div><div class="preview-title">${escapeHtml(title)}</div><p class="preview-copy mt-3">${escapeHtml(info)}</p>${p.reshare?'<div class="preview-action preview-share">✉️ 轉傳分享此訊息</div>':''}</div>`}
+    else{const img=validHttps(p.imageUrl)?`<img alt="第 ${i+1} 頁圖片" loading="lazy" referrerpolicy="no-referrer" src="${escapeHtml(p.imageUrl)}" onerror="this.style.display='none'">`:'<div class="h-28 flex items-center justify-center bg-slate-100 text-slate-400 text-xs">尚未設定圖片</div>';let body=p.layout==='image'?'':`<div class="preview-content"><div class="preview-title">${escapeHtml(p.title||'未填標題')}</div><div class="mt-3 space-y-2">${p.list.split(/\r?\n/).filter(x=>x.trim()).slice(0,15).map(x=>`<div class="preview-copy">🟢 ${escapeHtml(x)}</div>`).join('')}</div>${p.buttonText&&p.buttonUrl?`<div class="preview-action mt-4">${escapeHtml(p.buttonText)}</div>`:''}${p.reshare?'<div class="preview-action preview-share">✉️ 轉傳分享此訊息</div>':''}</div>`;if(p.layout==='image'&&p.reshare)body='<div class="preview-content"><div class="preview-action preview-share">✉️ 轉傳分享此訊息</div></div>';card.innerHTML=img+body}container.append(card)});$('previewLabel').textContent=`${pages.length} 張卡片`}
+  function updateOutput(){renderTabs();renderVisual();$('pageWarnings').textContent='';let dataJson;try{dataJson=JSON.stringify(getData());const link=getLink();$('shareUrl').value=link;const long=link.length>MAX_URL_WARN;$('urlStatus').className='text-xs mt-2 '+(long?'text-amber-700':'text-slate-500');$('urlStatus').textContent=`目前網址 ${link.length.toLocaleString()} 字元。${long?'⚠ 接近 LINE URI action 的 1000 字元上限；建議縮減內容。':'可直接分享連結以還原編輯器。'}`;if(link.length>MAX_URL_HARD){$('urlStatus').textContent+=' 已超過本工具限制。';$('urlStatus').className='text-xs mt-2 text-rose-700'}$('copyUrl').disabled=link.length>MAX_URL_HARD}catch(e){$('shareUrl').value='';$('copyUrl').disabled=true;$('urlStatus').textContent=e.message;$('urlStatus').className='text-xs mt-2 text-amber-700'}
+    try{const json=buildCarousel(),str=JSON.stringify(json,null,2);$('jsonPreview').textContent=str;$('jsonSize').textContent=`${byteLength(JSON.stringify(json)).toLocaleString()} / 51,200 bytes`;$('jsonErrors').textContent='';$('copyJson').disabled=false}catch(e){$('jsonPreview').textContent='// 請修正以下錯誤後即可產生完整 JSON';$('jsonSize').textContent='尚無有效 JSON';$('jsonErrors').textContent=e.message;$('copyJson').disabled=true;$('pageWarnings').textContent=e.message}}
+  function renderTemplates(){let drafts=getLocal(STORAGE.drafts,{});if(!drafts||typeof drafts!=='object'||Array.isArray(drafts))drafts={};$('templates').innerHTML='';const names=Object.keys(drafts).sort((a,b)=>(drafts[b]?.savedAt||0)-(drafts[a]?.savedAt||0));if(!names.length){$('templates').innerHTML='<p class="text-sm text-slate-400">尚未儲存範本</p>';return}for(const name of names){const wrapper=document.createElement('div');wrapper.className='inline-flex items-center rounded-full border border-green-200 bg-green-50 text-green-800 overflow-hidden';const open=document.createElement('button');open.className='text-sm font-bold px-3 py-2 hover:bg-green-100';open.textContent=name;open.title='載入範本 '+name;open.addEventListener('click',()=>{if(confirm(`載入「${name}」並覆蓋目前未儲存的編輯內容？`)){try{loadData(drafts[name].data);toast('已載入範本：'+name)}catch(e){alert(e.message)}}});const del=document.createElement('button');del.className='px-3 py-2 hover:bg-rose-100 text-rose-600 font-black';del.textContent='×';del.setAttribute('aria-label','刪除範本 '+name);del.addEventListener('click',()=>{if(!confirm(`刪除本機範本「${name}」？`))return;const d=getLocal(STORAGE.drafts,{});delete d[name];setLocal(STORAGE.drafts,d);renderTemplates()});wrapper.append(open,del);$('templates').append(wrapper)}}
+  async function initLiff(){const id=$('liffId').value.trim();setLocal(STORAGE.liff,id);if(!id){initialized=false;readyId='';setStatus('idle','● 未初始化','請輸入 LIFF ID。');return}if(!/^[0-9]+-[A-Za-z0-9_-]+$/.test(id)){initialized=false;readyId='';setStatus('bad','● ID 格式錯誤');return}if(initializing)return;if(!window.liff){setStatus('bad','● SDK 載入失敗','LIFF SDK 無法載入，請檢查網路、內容阻擋外掛或重新整理。');return}initializing=true;initialized=false;setStatus('wait','◌ 初始化中…');$('initBtn').disabled=true;try{await liff.init({liffId:id});if($('liffId').value.trim()!==id){initialized=false;readyId='';setStatus('idle','● ID 已變更');return}readyId=id;initialized=true;const available=liff.isApiAvailable('shareTargetPicker');setStatus('ok','● LIFF 初始化成功',available?'LIFF 已連線；可使用 LINE 分享選擇器。':'LIFF 已初始化，但 shareTargetPicker 在此環境不可用；請檢查 Console 授權並由手機 LINE 開啟。');await restoreFromUrlOnce()}catch(e){initialized=false;readyId='';setStatus('bad','● 初始化失敗',`初始化錯誤：${e.message||e}。請檢查 LIFF ID、Endpoint URL 及 LINE Login Channel 設定。`)}finally{initializing=false;$('initBtn').disabled=false;updateSendButton()}}
+  let urlRestored=false;
+  async function restoreFromUrlOnce(){if(urlRestored)return;let value=new URL(location.href).searchParams.get('data');if(!value){const state=new URL(location.href).searchParams.get('liff.state');if(state){try{const nested=new URL(state,'https://liff.line.me');value=nested.searchParams.get('data')}catch{}}}if(!value)return;urlRestored=true;try{const data=decodeData(value);loadData(data);alert('成功載入分享內容')}catch(e){alert('分享資料無法載入：'+e.message)}}
+  async function send(){if(!initialized||!readyId){alert('請先初始化 LIFF');return}if($('liffId').value.trim()!==readyId){alert('LIFF ID 已更改，請重新初始化');return}let contents;try{contents=buildCarousel()}catch(e){alert('無法發送：'+e.message);return}if(!liff.isLoggedIn()){if(liff.isInClient()){alert('LINE 尚未登入，請從 LINE 重新開啟 LIFF 連結');return}try{liff.login({redirectUri:location.href.split('#')[0]})}catch(e){alert('登入失敗：'+e.message)}return}if(!liff.isApiAvailable('shareTargetPicker')){alert('目前環境無法使用 shareTargetPicker。請在 LINE Developers Console 啟用此功能，並使用手機 LINE 開啟 LIFF 網址。');return}const btn=$('shareBtn');btn.disabled=true;btn.textContent='正在開啟選擇器…';try{const result=await liff.shareTargetPicker([{type:'flex',altText:'您收到了一則精美卡片訊息！',contents}]);if(result===null||result===undefined)toast('已關閉分享選擇器；若未選擇對象，則不會送出。');else toast('分享流程已完成，請至 LINE 聊天確認訊息。')}catch(e){alert('分享失敗：'+(e.message||e))}finally{btn.textContent='↗ 發送至 LINE';updateSendButton()}}
+  function download(name,body){const blob=new Blob([body],{type:'application/json;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
+  async function copy(text){if(!text)throw Error('沒有可複製的內容');try{await navigator.clipboard.writeText(text)}catch{const t=document.createElement('textarea');t.value=text;t.style.position='fixed';t.style.top='-9999px';document.body.append(t);t.select();const ok=document.execCommand('copy');t.remove();if(!ok)throw Error('複製失敗，請手動選取內容')}}
+  function on(id,type,handler){$(id).addEventListener(type,handler)}
+  document.addEventListener('DOMContentLoaded',()=>{
+    $('liffId').value=getLocal(STORAGE.liff,'');const saved=getLocal(STORAGE.current,null);if(saved){try{pages=normalizeData(saved).pages}catch{pages=[newPage('standard')]}}renderAll();renderTemplates();
+    on('liffId','input',()=>{setLocal(STORAGE.liff,$('liffId').value.trim());initialized=false;readyId='';setStatus('idle','● 尚未初始化','LIFF ID 已變更，請按「初始化 LIFF」重新連線。');updateOutput()});on('initBtn','click',initLiff);
+    on('tabs','click',e=>{const btn=e.target.closest('[data-page]');if(!btn)return;active=Number(btn.dataset.page);renderTabs();renderFields()});
+    on('addPage','click',()=>{if(pages.length>=MAX_PAGES)return;pages.push(newPage('standard'));active=pages.length-1;renderAll();saveCurrent()});
+    on('delPage','click',()=>{if(pages.length<=1)return;if(!confirm(`刪除頁面 ${active+1}？`))return;pages.splice(active,1);active=Math.min(active,pages.length-1);renderAll();saveCurrent()});
+    on('layout','change',()=>{pages[active].layout=$('layout').value;renderFields();updateOutput();saveCurrent()});
+    on('fields','input',e=>{const key=e.target.dataset.field;if(!key)return;pages[active][key]=e.target.value;updateOutput();saveCurrent()});
+    on('reshare','change',()=>{pages[active].reshare=$('reshare').checked;updateOutput();saveCurrent()});
+    on('saveTemplate','click',()=>{let name=$('templateName').value.trim();if(!name){alert('請輸入範本名稱');return}const drafts=getLocal(STORAGE.drafts,{});if(drafts[name]&&!confirm(`範本「${name}」已存在，要覆蓋嗎？`))return;drafts[name]={savedAt:Date.now(),data:getData()};if(setLocal(STORAGE.drafts,drafts)){renderTemplates();$('templateName').value='';toast('範本已儲存：'+name)}});
+    on('copyJson','click',async()=>{try{await copy($('jsonPreview').textContent);toast('已複製 JSON')}catch(e){alert(e.message)}});
+    on('copyUrl','click',async()=>{try{await copy($('shareUrl').value);toast('已複製轉傳網址')}catch(e){alert(e.message)}});
+    on('exportBtn','click',()=>download('line-flex-studio-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(getData(),null,2)));
+    on('importBtn','click',()=>$('importFile').click());
+    on('importFile','change',async e=>{const file=e.target.files?.[0];e.target.value='';if(!file)return;if(file.size>MAX_DATA_CHARS*4){alert('檔案太大');return}try{const data=JSON.parse(await file.text());const parsed=normalizeData(data);if(confirm(`匯入 ${parsed.pages.length} 頁並覆蓋目前內容？`)){loadData(parsed);toast('資料匯入成功')}}catch(err){alert('匯入失敗：'+err.message)}});
+    on('resetBtn','click',()=>{if(!confirm('清空目前全部分頁？已儲存的範本與 LIFF ID 會保留。'))return;pages=[newPage('standard')];active=0;renderAll();saveCurrent();toast('編輯器已重設')});
+    on('shareBtn','click',send);
+    // 接收者新裝置的 LocalStorage 可能為空，優先從公開分享網址還原 LIFF ID。
+    let incoming=new URL(location.href).searchParams;
+    let incomingId=incoming.get('lid');
+    if(!incomingId&&incoming.has('liff.state')){try{incomingId=new URL(incoming.get('liff.state'),'https://liff.line.me').searchParams.get('lid')}catch{}}
+    if(incomingId&&/^[0-9]+-[A-Za-z0-9_-]+$/.test(incomingId)){$('liffId').value=incomingId;setLocal(STORAGE.liff,incomingId)}
+    if($('liffId').value.trim())initLiff();
+  });
+})();
+</script>
+</body>
+</html>
